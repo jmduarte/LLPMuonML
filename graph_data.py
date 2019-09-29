@@ -62,7 +62,8 @@ class GraphDataset(Dataset):
                 edge_index = torch.tensor(pairs, dtype=torch.long)
                 edge_index=edge_index.t().contiguous()
                 x = torch.tensor(feature_array[0], dtype=torch.float)
-                data = Data(x=x, edge_index=edge_index, y=label_array[event])
+                y = torch.tensor(label_array[event], dtype=torch.float)
+                data = Data(x=x, edge_index=edge_index, y=y)
                 if self.pre_filter is not None and not self.pre_filter(data):
                     continue
                 if self.pre_transform is not None:
