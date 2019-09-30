@@ -1,3 +1,4 @@
+import setGPU
 import keras
 import numpy as np
 import tables
@@ -7,6 +8,8 @@ from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import argparse
 from models import dense, dense_conv1d_gru
+import os
+print(os.environ['CUDA_VISIBLE_DEVICES'])
 
 def get_raw_features_labels(file_name, features, features_csc, features_lep, features_jet, labels):
     # load file

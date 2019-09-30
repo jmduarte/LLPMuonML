@@ -1,3 +1,4 @@
+import setGPU
 import torch
 from torch_geometric.data import Data, DataLoader
 from graph_data import GraphDataset
@@ -9,9 +10,9 @@ import numpy as np
 import tqdm
 import argparse
 import torch.nn.functional as F
+print(os.environ['CUDA_VISIBLE_DEVICES'])
 
-#device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-device = torch.device('cpu')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print('using device %s'%device)
 
 
@@ -45,6 +46,7 @@ def test(model,loader,total,batch_size):
         data = data.to(device)
         batch_loss_item = 0
         for idata in data.to_data_list():
+            idata = idata.to(device)
             batch_target = idata.y
             batch_output = model(idata)
             batch_loss_item += F.binary_cross_entropy(batch_output, batch_target).item()
@@ -84,8 +86,9 @@ def train(model, optimizer, epoch, loader, total, batch_size):
     for i,data in t:
         data = data.to(device)
         optimizer.zero_grad()
-        batch_loss = torch.tensor(0,dtype=torch.float)
+        batch_loss = torch.tensor(0,dtype=torch.float).to(device)
         for idata in data.to_data_list():
+            idata = idata.to(device)
             batch_target = idata.y        
             batch_output = model(idata)
             batch_loss += F.binary_cross_entropy(batch_output, batch_target)
@@ -113,8 +116,8 @@ def main(args):
     tv_frac = 0.10
     tv_num = math.ceil(fulllen*tv_frac)
     splits = np.cumsum([fulllen-2*tv_num,tv_num,tv_num])
-    batch_size = 64
-    n_epochs = 3
+    batch_size = 128
+    n_epochs = 100
     lr = 0.01
     patience = 10
     hidden_dim = 32

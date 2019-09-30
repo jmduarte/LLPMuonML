@@ -6,5 +6,7 @@ conda install pytorch torchvision cudatoolkit=10.0 -c pytorch
 pip install --verbose --no-cache-dir torch-scatter
 pip install --verbose --no-cache-dir torch-sparse
 pip install --verbose --no-cache-dir torch-cluster
-pip install --verbose --no-cache-dir torch-spline-conv (optional)
+pip install --verbose --no-cache-dir torch-spline-conv
 pip install torch-geometric
+pip install tqdm
+pip install setGPU
