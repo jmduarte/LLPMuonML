@@ -19,11 +19,25 @@ csc_branches = ['cscITLabels', 'cscLabels', 'cscStation', 'cscLayer',
                 'cscPhi', 'cscEta', 'cscX', 'cscY', 'cscZ', 
                 'cscDirectionX', 'cscDirectionY', 'cscDirectionZ',
                 'cscNRecHits', 'cscNRecHits_flag', 'cscT', 'cscChi2']
+cluster_branches = ['cscClusterX','cscClusterY','cscClusterZ','cscClusterTime',
+                    'cscClusterTimeSpread','cscClusterTimeRMS','cscClusterGenMuonDeltaR',
+                    'cscClusterRadius','cscClusterMajorAxis','cscClusterMinorAxis',
+                    'cscClusterEtaPhiSpread','cscClusterPhiSpread','cscClusterEtaSpread',
+                    'cscClusterXSpread','cscClusterYSpread','cscClusterZSpread',
+                    'cscClusterPhi','cscClusterEta','cscClusterJetVeto',
+                    'cscClusterMuonVeto','cscClusterCaloJetVeto','cscClusterSize',
+                    'cscClusterMe1112Ratio','cscClusterNStation','cscClusterMaxStation',
+                    'cscClusterMaxStationRatio','cscClusterNLayer','cscClusterMaxLayer',
+                    'cscClusterMaxLayerRatio','cscClusterVertexR','cscClusterVertexZ',
+                    'cscClusterVertexDis','cscClusterVertexChi2','cscClusterVertexN1',
+                    'cscClusterVertexN5','cscClusterVertexN10','cscClusterVertexN15',
+                    'cscClusterVertexN20','cscClusterVertexN']
 lepton_branches = ['lepPt','lepEta','lepPhi']
 jet_branches = ['jetPt','jetEta','jetPhi']
 
 print(other_branches)
 print(csc_branches)
+print(cluster_branches)
 print(lepton_branches)
 print(jet_branches)
 
@@ -35,6 +49,7 @@ def _transform(dataframe, max_particles=100, start=0, stop=-1):
 
 df_others = []
 df_cscs = []
+df_clusters = []
 df_leptons = []
 df_jets = []
 currententry = 0
@@ -48,22 +63,26 @@ for infile in infiles:
     else:
         df_other['isSignal'] = np.zeros(len(df_other))
     df_csc = tree.pandas.df(branches=csc_branches, entrystart=0, entrystop = entrystop)
+    df_cluster = tree.pandas.df(branches=cluster_branches, entrystart=0, entrystop = entrystop)
     df_lepton = tree.pandas.df(branches=lepton_branches, entrystart=0, entrystop = entrystop)
     df_jet = tree.pandas.df(branches=jet_branches, entrystart=0, entrystop = entrystop)
 
     df_other.index = df_other.index+currententry
     df_csc.index = df_csc.index.set_levels(df_csc.index.levels[0]+currententry, level=0)
+    df_cluster.index = df_cluster.index.set_levels(df_cluster.index.levels[0]+currententry, level=0)
     df_lepton.index = df_lepton.index.set_levels(df_lepton.index.levels[0]+currententry, level=0)
     df_jet.index = df_jet.index.set_levels(df_jet.index.levels[0]+currententry, level=0)
     currententry += len(df_other)
 
     df_others.append(df_other)
     df_cscs.append(df_csc)
+    df_clusters.append(df_cluster)
     df_leptons.append(df_lepton)
     df_jets.append(df_jet)
     
 df_other = pd.concat(df_others)
 df_csc = pd.concat(df_cscs)
+df_cluster = pd.concat(df_clusters)
 df_lepton = pd.concat(df_leptons)
 df_jet = pd.concat(df_jets)
 
@@ -71,12 +90,15 @@ df_jet = pd.concat(df_jets)
 df_other = df_other.sample(frac=1)
 # apply new ordering to other dataframes
 df_csc = df_csc.reindex(df_other.index.values,level=0)
+df_cluster = df_cluster.reindex(df_other.index.values,level=0)
 df_lepton = df_lepton.reindex(df_other.index.values,level=0)
 df_jet = df_jet.reindex(df_other.index.values,level=0)
 
 with tables.open_file(outfile, mode='w') as h5file:
     
-    max_csc = len(df_csc.index.get_level_values(-1).unique())
+    #max_csc = len(df_csc.index.get_level_values(-1).unique())
+    max_csc = 136
+    max_cluster = len(df_cluster.index.get_level_values(-1).unique())
     max_lepton = len(df_lepton.index.get_level_values(-1).unique())
     max_jet = len(df_jet.index.get_level_values(-1).unique())
 
@@ -87,6 +109,11 @@ with tables.open_file(outfile, mode='w') as h5file:
     v_csc = _transform(df_csc, max_particles = max_csc)
     for k in csc_branches:
         v = np.stack([v_csc[(k, i)].values for i in range(max_csc)], axis=-1)
+        _write_carray(v, h5file, name=k)
+
+    v_cluster = _transform(df_cluster, max_particles = max_cluster)
+    for k in cluster_branches:
+        v = np.stack([v_cluster[(k, i)].values for i in range(max_cluster)], axis=-1)
         _write_carray(v, h5file, name=k)
                 
     v_lepton = _transform(df_lepton, max_particles = max_lepton)

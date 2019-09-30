@@ -39,3 +39,53 @@ class EdgeNet(nn.Module):
         output = self.outputnet(sum_H)
         return output
 
+import keras
+from keras.models import Model
+from keras.layers import Input, Dense, BatchNormalization, Dropout, Conv1D, SpatialDropout1D, GRU, Concatenate, Flatten
+
+def dense(nfeatures, ncsc, ncscfeatures, nlabels):
+
+    inputs = Input(shape=(nfeatures,), name = 'input')  
+    inputs_csc = Input(shape=(ncsc,ncscfeatures,), name='input_csc')
+    flat = Flatten()(inputs_csc)
+    x = Concatenate()([inputs, flat])
+    x = BatchNormalization(name='bn_1')(x)
+    x = Dense(64, name = 'dense_1', activation='relu')(x)
+    x = Dropout(0.1)(x)
+    x = Dense(32, name = 'dense_2', activation='relu')(x)
+    x = Dropout(0.1)(x)
+    x = Dense(32, name = 'dense_3', activation='relu')(x)
+    x = Dropout(0.1)(x)
+    
+    outputs = Dense(nlabels, name = 'output', activation='sigmoid')(x)
+    keras_model = Model(inputs=[inputs,inputs_csc], outputs=outputs)
+
+    return keras_model
+
+
+def dense_conv1d_gru(nfeatures, ncsc, ncscfeatures, nlabels):
+
+    inputs = Input(shape=(nfeatures,), name = 'input')  
+    x = BatchNormalization(name='bn_1')(inputs)
+    x = Dense(64, name = 'dense_1', activation='relu')(x)
+    x = Dropout(0.1)(x)
+    x = Dense(32, name = 'dense_2', activation='relu')(x)
+    x = Dropout(0.1)(x)
+    x = Dense(32, name = 'dense_3', activation='relu')(x)
+    x = Dropout(0.1)(x)
+    
+    inputs_csc = Input(shape=(ncsc,ncscfeatures,), name='input_csc')
+    y = BatchNormalization(name='bn_2')(inputs_csc)
+    y = Conv1D(filters=64, kernel_size=(5,), strides=(1,), padding='same', use_bias=False, name='conv1d_1', activation = 'relu')(y)
+    y = SpatialDropout1D(rate=0.1)(y)
+    y = Conv1D(filters=64, kernel_size=(5,), strides=(1,), padding='same', use_bias=False, name='conv1d_2', activation = 'relu')(y)
+    y = SpatialDropout1D(rate=0.1)(y)
+    y = GRU(150,go_backwards=True,implementation=2,name='gru_1')(y)
+    y = Dropout(rate=0.1)(y)
+
+    concat = Concatenate()([x,y])
+
+    outputs = Dense(nlabels, name = 'output', activation='sigmoid')(concat)
+    keras_model = Model(inputs=[inputs,inputs_csc], outputs=outputs)
+
+    return keras_model
