@@ -113,8 +113,8 @@ def main(args):
     n_epochs = 100
     lr = 0.01
     patience = 10
-    hidden_dim = 64
-    n_iters = 2
+    hidden_dim = 32
+    n_iters = 1
 
     train_dataset = torch.utils.data.Subset(full_dataset,np.arange(start=0,stop=splits[0]))
     valid_dataset = torch.utils.data.Subset(full_dataset,np.arange(start=splits[1],stop=splits[2]))

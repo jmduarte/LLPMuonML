@@ -11,11 +11,16 @@ class GraphDataset(Dataset):
 
     @property
     def raw_file_names(self):
-        return ['WH_HToSSTobbbb_WToLNu_MH-125_MS-40_ctauS-10000_WJetsToLNu.h5']
+        return ['WH_HToSSTobbbb_WToLNu_MH-125_MS-15to55_ctauS-100to10000_WJetsToLNu.h5']
 
     @property
     def processed_file_names(self):
-        return ['data_{}.pt'.format(i) for i in range(3000)]
+        nevents = 0
+        for raw_file_name in self.raw_file_names:
+            h5file = tables.open_file(osp.join(self.raw_dir, raw_file_name),'r')
+            nevents += h5file.root.nCsc.shape[0]
+            h5file.close()
+        return ['data_{}.pt'.format(i) for i in range(nevents)]
 
     def __len__(self):
         return len(self.processed_file_names)
