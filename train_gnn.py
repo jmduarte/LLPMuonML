@@ -10,8 +10,8 @@ import numpy as np
 import tqdm
 import argparse
 import torch.nn.functional as F
-print(os.environ['CUDA_VISIBLE_DEVICES'])
-
+import matplotlib.pyplot as plt
+from sklearn.metrics import roc_curve, auc
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print('using device %s'%device)
 
@@ -44,27 +44,24 @@ def test(model,loader,total,batch_size):
     t = tqdm.tqdm(enumerate(loader),total=total/batch_size)
     for i,data in t:
         data = data.to(device)
-        batch_loss_item = 0
-        for idata in data.to_data_list():
-            idata = idata.to(device)
-            batch_target = idata.y
-            batch_output = model(idata)
-            batch_loss_item += F.binary_cross_entropy(batch_output, batch_target).item()
-            sum_loss += batch_loss_item/batch_size
-            matches = ((batch_output > 0.5) == (batch_target > 0.5))
-            true_pos = ((batch_output > 0.5) & (batch_target > 0.5))
-            true_neg = ((batch_output < 0.5) & (batch_target < 0.5))
-            false_pos = ((batch_output > 0.5) & (batch_target < 0.5))
-            false_neg = ((batch_output < 0.5) & (batch_target > 0.5))
-            sum_truepos += true_pos.sum().item()
-            sum_trueneg += true_neg.sum().item()
-            sum_falsepos += false_pos.sum().item()
-            sum_falseneg += false_neg.sum().item()
-            sum_correct += matches.sum().item()
-            sum_true += batch_target.sum().item()
-            sum_false += (batch_target < 0.5).sum().item()
-            sum_total += matches.numel()
-        t.set_description("batch loss = %.5f" % (batch_loss_item/batch_size))
+        batch_target = data.y
+        batch_output = model(data)
+        batch_loss_item = F.binary_cross_entropy(batch_output, batch_target).item()
+        sum_loss += batch_loss_item
+        matches = ((batch_output > 0.5) == (batch_target > 0.5))
+        true_pos = ((batch_output > 0.5) & (batch_target > 0.5))
+        true_neg = ((batch_output < 0.5) & (batch_target < 0.5))
+        false_pos = ((batch_output > 0.5) & (batch_target < 0.5))
+        false_neg = ((batch_output < 0.5) & (batch_target > 0.5))
+        sum_truepos += true_pos.sum().item()
+        sum_trueneg += true_neg.sum().item()
+        sum_falsepos += false_pos.sum().item()
+        sum_falseneg += false_neg.sum().item()
+        sum_correct += matches.sum().item()
+        sum_true += batch_target.sum().item()
+        sum_false += (batch_target < 0.5).sum().item()
+        sum_total += matches.numel()
+        t.set_description("batch loss = %.5f" % (batch_loss_item))
         t.refresh() # to show immediately the update
 
 
@@ -86,22 +83,18 @@ def train(model, optimizer, epoch, loader, total, batch_size):
     for i,data in t:
         data = data.to(device)
         optimizer.zero_grad()
-        batch_loss = torch.tensor(0,dtype=torch.float).to(device)
-        for idata in data.to_data_list():
-            idata = idata.to(device)
-            batch_target = idata.y        
-            batch_output = model(idata)
-            batch_loss += F.binary_cross_entropy(batch_output, batch_target)
-        batch_loss = batch_loss/batch_size
+        batch_target = data.y        
+        batch_output = model(data)
+        batch_loss = F.binary_cross_entropy(batch_output, batch_target)
         batch_loss.backward()
         batch_loss_item = batch_loss.item()
         t.set_description("batch loss = %.5f" % batch_loss_item)
         t.refresh() # to show immediately the update
         sum_loss += batch_loss_item
         optimizer.step()
-
-    modpath = osp.join(os.getcwd(),model_fname+'.%d.pth'%epoch)
-    torch.save(model.state_dict(),modpath)
+    # to save every epoch
+    #modpath = osp.join(os.getcwd(),model_fname+'.%d.pth'%epoch)
+    #torch.save(model.state_dict(),modpath)
     
     return sum_loss/(i+1)
 
@@ -120,16 +113,19 @@ def main(args):
     n_epochs = 100
     lr = 0.01
     patience = 10
-    hidden_dim = 32
-    n_iters = 1
+    hidden_dim = 64
+    n_iters = 2
 
     train_dataset = torch.utils.data.Subset(full_dataset,np.arange(start=0,stop=splits[0]))
     valid_dataset = torch.utils.data.Subset(full_dataset,np.arange(start=splits[1],stop=splits[2]))
+    test_dataset = torch.utils.data.Subset(full_dataset,np.arange(start=splits[0],stop=splits[1]))
     train_loader = DataLoader(train_dataset, batch_size=batch_size, pin_memory=True, shuffle=True)
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, pin_memory=True, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, pin_memory=True, shuffle=False)
 
     train_samples = len(train_dataset)
     valid_samples = len(valid_dataset)
+    test_samples = len(test_dataset)
     
     model = EdgeNet(input_dim=input_dim,hidden_dim=hidden_dim,n_iters=n_iters).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr = lr)
@@ -144,11 +140,12 @@ def main(args):
         epoch_loss = train(model, optimizer, epoch, train_loader, train_samples, batch_size)
         valid_loss, valid_acc, valid_eff, valid_fp, valid_fn, valid_pur = test(model, valid_loader, valid_samples, batch_size)
         print('Epoch: {:02d}, Training Loss: {:.4f}'.format(epoch, epoch_loss))
-        print('               Validation Loss: {:.4f}, Eff.: {:.4f}, FalsePos: {:.4f}, FalseNeg: {:.4f}, Purity: {:,.4f}'.format(valid_loss,
-                                                                                                                                 valid_eff,
-                                                                                                                                 valid_fp,
-                                                                                                                                 valid_fn,
-                                                                                                                                 valid_pur))
+        print('               Validation Loss: {:.4f}, Acc.: {:.4f}, Eff.: {:.4f}, FalsePos: {:.4f}, FalseNeg: {:.4f}, Purity: {:,.4f}'.format(valid_loss, 
+                                                                                                                                               valid_acc,
+                                                                                                                                               valid_eff,
+                                                                                                                                               valid_fp,
+                                                                                                                                               valid_fn,
+                                                                                                                                               valid_pur))
 
         if valid_loss < best_valid_loss:
             best_valid_loss = valid_loss
@@ -167,6 +164,30 @@ def main(args):
     print('Final model saved to:',modpath)
     torch.save(model.state_dict(),modpath)
 
+    modpath = osp.join(os.getcwd(),model_fname+'.best.pth')
+    model.load_state_dict(torch.load(modpath))
+    y_test, predict_test = [], []
+    for i,data in enumerate(test_loader):
+        y_test.append(data.y.cpu().detach().numpy())
+        data = data.to(device)
+        predict_test.append(model(data).cpu().detach().numpy())
+    y_test = np.concatenate(y_test,axis=0)
+    predict_test = np.concatenate(predict_test,axis=0)
+
+    plt.figure()       
+    fpr, tpr, threshold = roc_curve(y_test,predict_test)
+    auc_test = auc(fpr, tpr)
+    
+    plt.plot(tpr,fpr,label='LLP muon tagger (GNN), AUC = %.1f%%'%(auc_test*100.))
+    plt.semilogy()
+    plt.xlabel("Signal Efficiency")
+    plt.ylabel("Background Efficiency")
+    plt.ylim(0.001,1)
+    plt.grid(True)
+    plt.legend(loc='upper left')
+    plt.figtext(0.25, 0.90,'CMS',fontweight='bold', wrap=True, horizontalalignment='right', fontsize=14)
+    plt.figtext(0.35, 0.90,'preliminary', style='italic', wrap=True, horizontalalignment='center', fontsize=14) 
+    plt.savefig('ROC_gnn.pdf')
   
 if __name__ == "__main__":
 

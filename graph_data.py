@@ -51,18 +51,28 @@ class GraphDataset(Dataset):
 
     def process(self):
         i = 0    
-        features = ['cscX', 'cscY', 'cscZ', 'cscT']
+        features = ['cscX', 'cscY', 'cscZ', 'cscT', 
+                    'cscEta', 'cscPhi', 
+                    'cscDirectionX', 'cscDirectionY', 'cscDirectionZ',
+                    'cscStation', 'cscLayer', 
+                    'cscNRecHits', 'cscChi2']
+        feature_scale = np.array([1000., 1000., 1000., 100., 
+                                  3., np.pi, 
+                                  1., 1., 1.,
+                                  40., 4.,
+                                  6. , 1000.])
         spectators = ['nCsc']
         labels = ['isSignal']
         for raw_path in self.raw_paths:
             feature_array, spec_array, label_array = self.get_raw_features_labels(raw_path,features,spectators,labels)
             nevents = label_array.shape[0]
             for event in range(nevents):
-                pairs = [[i, j] for (i, j) in itertools.product(range(int(spec_array[event,0])),range(int(spec_array[event,0]))) if i!=j]
+                max_csc = min(spec_array[event,0],feature_array.shape[1])
+                pairs = [[i, j] for (i, j) in itertools.product(range(int(max_csc)),range(int(max_csc))) if i!=j]
                 edge_index = torch.tensor(pairs, dtype=torch.long)
                 edge_index=edge_index.t().contiguous()
-                x = torch.tensor(feature_array[0], dtype=torch.float)
-                y = torch.tensor(label_array[event], dtype=torch.float)
+                x = torch.tensor(feature_array[event]/feature_scale, dtype=torch.float)
+                y = torch.tensor(label_array[event], dtype=torch.float).reshape(1,1)
                 data = Data(x=x, edge_index=edge_index, y=y)
                 if self.pre_filter is not None and not self.pre_filter(data):
                     continue

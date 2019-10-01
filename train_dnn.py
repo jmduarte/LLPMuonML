@@ -7,11 +7,10 @@ from sklearn.metrics import roc_curve, auc
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import argparse
-from models import dense, dense_conv1d_gru
-import os
-print(os.environ['CUDA_VISIBLE_DEVICES'])
+from models import dense, dense_conv1d_gru, conv1d_gru
+import math
 
-def get_raw_features_labels(file_name, features, features_csc, features_lep, features_jet, labels):
+def get_raw_features_labels(file_name, features, features_csc, features_lep, features_jet, labels, features_csc_scale):
     # load file
     h5file = tables.open_file(file_name, 'r')
     nevents = getattr(h5file.root,features[0]).shape[0]
@@ -34,7 +33,7 @@ def get_raw_features_labels(file_name, features, features_csc, features_lep, fea
         feature_array[:,i] = getattr(h5file.root,feat)[:]
     # load csc feature arrays
     for (i, feat) in enumerate(features_csc):
-        feature_csc_array[:,:,i] = getattr(h5file.root,feat)[:,:]
+        feature_csc_array[:,:,i] = getattr(h5file.root,feat)[:,:]/features_csc_scale[i]
     # load lep feature arrays
     for (i, feat) in enumerate(features_lep):
         feature_lep_array[:,:,i] = getattr(h5file.root,feat)[:,:]
@@ -52,41 +51,88 @@ def main(args):
     file_path = 'data/raw/WH_HToSSTobbbb_WToLNu_MH-125_MS-40_ctauS-10000_WJetsToLNu.h5'
     features = ['npv', 'rho', 'met', 'metPhi', 'nCsc', 'nCscClusters', 'nCscITClusters', 
                 'nLeptons', 'nJets']
-    features_csc = ['cscStation', 'cscLayer', 'cscPhi', 'cscEta', 
-                    'cscX', 'cscY', 'cscZ', 'cscT', 
+    features_csc = ['cscX', 'cscY', 'cscZ', 'cscT', 
+                    'cscEta', 'cscPhi', 
                     'cscDirectionX', 'cscDirectionY', 'cscDirectionZ',
+                    'cscStation', 'cscLayer', 
                     'cscNRecHits', 'cscChi2']
+    features_csc_scale = np.array([1000., 1000., 1000., 100., 
+                                   3., np.pi, 
+                                   1., 1., 1.,
+                                   40., 4.,
+                                   6. , 1000.])
     features_lep = ['lepPt','lepEta','lepPhi']
     features_jet = ['jetPt','jetEta','jetPhi']
     labels = ['isSignal']
-    feature_array, feature_csc_array, feature_lep_array, feature_jet_array, label_array = get_raw_features_labels(file_path,features,features_csc,features_lep,features_jet,labels)
+    feature_array, feature_csc_array, feature_lep_array, feature_jet_array, label_array = get_raw_features_labels(file_path,features,features_csc,features_lep,features_jet,labels,features_csc_scale)
     nevents = label_array.shape[0]
     nfeatures = feature_array.shape[1]
     ncsc = feature_csc_array.shape[1]
     ncscfeatures = feature_csc_array.shape[2]
     nlabels = len(labels)
 
-    #keras_model = dense(nfeatures,ncsc,ncscfeatures,nlabels)
-    keras_model = dense_conv1d_gru(nfeatures,ncsc,ncscfeatures,nlabels)
+    keras_model = conv1d_gru(ncsc,ncscfeatures,nlabels)
 
     keras_model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
     print(keras_model.summary())
 
-    early_stopping = EarlyStopping(monitor='val_loss', patience=20)
+    early_stopping = EarlyStopping(monitor='val_loss', patience=10)
     model_checkpoint = ModelCheckpoint('keras_model_best.h5', monitor='val_loss', save_best_only=True)
     callbacks = [early_stopping, model_checkpoint]
 
     # fit keras model
-    X = [feature_array, feature_csc_array]
+    X = feature_csc_array
     y = label_array
-    feature_array_train_val, feature_array_test, feature_array_csc_train_val, feature_array_csc_test, y_train_val, y_test = train_test_split(feature_array, feature_csc_array, y, test_size=0.1, random_state=42)
-    X_train_val = [feature_array_train_val, feature_array_csc_train_val]
-    X_test = [feature_array_test, feature_array_csc_test]
+
+    fulllen = len(y)
+    tv_frac = 0.10
+    tv_num = math.ceil(fulllen*tv_frac)
+    splits = np.cumsum([fulllen-2*tv_num,tv_num,tv_num])
+
+    feature_array_train = feature_array[0:splits[0]]
+    feature_array_val = feature_array[splits[1]:splits[2]]
+    feature_array_test = feature_array[splits[0]:splits[1]]
+
+    feature_csc_array_train = feature_csc_array[0:splits[0]]
+    feature_csc_array_val = feature_csc_array[splits[1]:splits[2]]
+    feature_csc_array_test = feature_csc_array[splits[0]:splits[1]]
+
+    y_train = y[0:splits[0]]
+    y_val = y[splits[1]:splits[2]]
+    y_test = y[splits[0]:splits[1]]
     
-    keras_model.fit(X_train_val, y_train_val, batch_size=1024, 
-                    epochs=100, validation_split=0.111, shuffle=False,
+
+    X_train = feature_csc_array_train
+    X_val = feature_csc_array_val
+    X_test = feature_csc_array_test
+    
+    keras_model.fit(X_train, y_train, batch_size=128, 
+                    epochs=100, validation_data=(X_val, y_val), shuffle=True,
                     callbacks = callbacks)
-            
+
+    keras_model.load_weights('keras_model_best.h5')
+    
+    predict_test = keras_model.predict(X_test)
+
+    fpr = {}
+    tpr = {}
+    auc1 = {}
+    
+    plt.figure()       
+    fpr, tpr, threshold = roc_curve(y_test,predict_test)
+    auc_test = auc(fpr, tpr)
+    
+    plt.plot(tpr,fpr,label='LLP muon tagger (Conv1D+GRU+Dense), AUC = %.1f%%'%(auc_test*100.))
+    plt.semilogy()
+    plt.xlabel("Signal Efficiency")
+    plt.ylabel("Background Efficiency")
+    plt.ylim(0.001,1)
+    plt.grid(True)
+    plt.legend(loc='upper left')
+    plt.figtext(0.25, 0.90,'CMS',fontweight='bold', wrap=True, horizontalalignment='right', fontsize=14)
+    plt.figtext(0.35, 0.90,'preliminary', style='italic', wrap=True, horizontalalignment='center', fontsize=14) 
+    plt.savefig('ROC_dnn.pdf')
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
