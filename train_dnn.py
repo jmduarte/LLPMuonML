@@ -26,7 +26,7 @@ def get_raw_features_labels(file_name, features, features_csc, features_lep, fea
     feature_array = np.zeros((nevents,nfeatures))
     feature_csc_array = np.zeros((nevents,ncsc,nfeatures_csc))
     feature_lep_array = np.zeros((nevents,nlep,nfeatures_lep))
-    feature_jet_array = np.zeros((nevents,njet,nfeatures_jet))
+    #feature_jet_array = np.zeros((nevents,njet,nfeatures_jet))
     label_array = np.zeros((nevents,nlabels))
     # load feature arrays
     for (i, feat) in enumerate(features):
@@ -38,17 +38,17 @@ def get_raw_features_labels(file_name, features, features_csc, features_lep, fea
     for (i, feat) in enumerate(features_lep):
         feature_lep_array[:,:,i] = getattr(h5file.root,feat)[:,:]
     # load jet feature arrays
-    for (i, feat) in enumerate(features_jet):
-        feature_jet_array[:,:,i] = getattr(h5file.root,feat)[:,:]
+    #for (i, feat) in enumerate(features_jet):
+    #    feature_jet_array[:,:,i] = getattr(h5file.root,feat)[:,:]
     # load labels arrays
     for (i, label) in enumerate(labels):
         label_array[:,i] = getattr(h5file.root,label)[:]
 
     h5file.close()
-    return feature_array, feature_csc_array, feature_lep_array, feature_jet_array, label_array
+    return feature_array, feature_csc_array, feature_lep_array, label_array
 
 def main(args):
-    file_path = 'data/raw/WH_HToSSTobbbb_WToLNu_MH-125_MS-40_ctauS-10000_WJetsToLNu.h5'
+    file_path = 'data/raw/WH_HToSSTobbbb_WToLNu_MH-125_MS-15to55_ctauS-100to10000_WJetsToLNu.h5'
     features = ['npv', 'rho', 'met', 'metPhi', 'nCsc', 'nCscClusters', 'nCscITClusters', 
                 'nLeptons', 'nJets']
     features_csc = ['cscX', 'cscY', 'cscZ', 'cscT', 
@@ -64,7 +64,7 @@ def main(args):
     features_lep = ['lepPt','lepEta','lepPhi']
     features_jet = ['jetPt','jetEta','jetPhi']
     labels = ['isSignal']
-    feature_array, feature_csc_array, feature_lep_array, feature_jet_array, label_array = get_raw_features_labels(file_path,features,features_csc,features_lep,features_jet,labels,features_csc_scale)
+    feature_array, feature_csc_array, feature_lep_array, label_array = get_raw_features_labels(file_path,features,features_csc,features_lep,features_jet,labels,features_csc_scale)
     nevents = label_array.shape[0]
     nfeatures = feature_array.shape[1]
     ncsc = feature_csc_array.shape[1]
@@ -88,6 +88,10 @@ def main(args):
     tv_frac = 0.10
     tv_num = math.ceil(fulllen*tv_frac)
     splits = np.cumsum([fulllen-2*tv_num,tv_num,tv_num])
+    w_s = 1.
+    w_b = (np.sum(y)/len(y)) / (np.sum(1-y)/len(y))
+    weights = (y)*(w_s)+(1-y)*(w_b)
+    weights = weights.reshape(-1)
 
     feature_array_train = feature_array[0:splits[0]]
     feature_array_val = feature_array[splits[1]:splits[2]]
@@ -96,6 +100,10 @@ def main(args):
     feature_csc_array_train = feature_csc_array[0:splits[0]]
     feature_csc_array_val = feature_csc_array[splits[1]:splits[2]]
     feature_csc_array_test = feature_csc_array[splits[0]:splits[1]]
+
+    weights_train = weights[0:splits[0]]
+    weights_val = weights[splits[1]:splits[2]]
+    weights_test = weights[splits[0]:splits[1]]
 
     y_train = y[0:splits[0]]
     y_val = y[splits[1]:splits[2]]
@@ -106,8 +114,8 @@ def main(args):
     X_val = feature_csc_array_val
     X_test = feature_csc_array_test
     
-    keras_model.fit(X_train, y_train, batch_size=128, 
-                    epochs=100, validation_data=(X_val, y_val), shuffle=True,
+    keras_model.fit(X_train, y_train, sample_weight = weights_train, batch_size=1024, 
+                    epochs=100, validation_data=(X_val, y_val, weights_val), shuffle=True,
                     callbacks = callbacks)
 
     keras_model.load_weights('keras_model_best.h5')

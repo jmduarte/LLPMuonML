@@ -70,6 +70,8 @@ class GraphDataset(Dataset):
         labels = ['isSignal']
         for raw_path in self.raw_paths:
             feature_array, spec_array, label_array = self.get_raw_features_labels(raw_path,features,spectators,labels)
+            w_s = 1.
+            w_b = (np.sum(label_array)/len(label_array)) / (np.sum(1-label_array)/len(label_array))
             nevents = label_array.shape[0]
             for event in range(nevents):
                 max_csc = min(spec_array[event,0],feature_array.shape[1])
@@ -78,7 +80,9 @@ class GraphDataset(Dataset):
                 edge_index=edge_index.t().contiguous()
                 x = torch.tensor(feature_array[event]/feature_scale, dtype=torch.float)
                 y = torch.tensor(label_array[event], dtype=torch.float).reshape(1,1)
+                weight = y*w_s + (1-y)*w_b
                 data = Data(x=x, edge_index=edge_index, y=y)
+                data.weight = weight
                 if self.pre_filter is not None and not self.pre_filter(data):
                     continue
                 if self.pre_transform is not None:

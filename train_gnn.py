@@ -46,7 +46,8 @@ def test(model,loader,total,batch_size):
         data = data.to(device)
         batch_target = data.y
         batch_output = model(data)
-        batch_loss_item = F.binary_cross_entropy(batch_output, batch_target).item()
+        batch_weight = data.weight
+        batch_loss_item = F.binary_cross_entropy(batch_output, batch_target, weight=batch_weight).item()
         sum_loss += batch_loss_item
         matches = ((batch_output > 0.5) == (batch_target > 0.5))
         true_pos = ((batch_output > 0.5) & (batch_target > 0.5))
@@ -72,7 +73,9 @@ def test(model,loader,total,batch_size):
           'sfp', sum_falsepos,
           'sfn', sum_falseneg,
           'stot', sum_total)
-    return sum_loss/(i+1), sum_correct / sum_total, sum_truepos/sum_true, sum_falsepos / sum_false, sum_falseneg / sum_true, sum_truepos/(sum_truepos+sum_falsepos + 1e-6)
+    #acc = sum_corrrect / sum_total
+    acc = sum_truepos/sum_true/2. + sum_trueneg / sum_false/2.
+    return sum_loss/(i+1), acc, sum_truepos/sum_true, sum_falsepos / sum_false, sum_falseneg / sum_true, sum_truepos/(sum_truepos+sum_falsepos + 1e-6)
 
 def train(model, optimizer, epoch, loader, total, batch_size):
     model.train()
@@ -85,7 +88,8 @@ def train(model, optimizer, epoch, loader, total, batch_size):
         optimizer.zero_grad()
         batch_target = data.y        
         batch_output = model(data)
-        batch_loss = F.binary_cross_entropy(batch_output, batch_target)
+        batch_weight = data.weight
+        batch_loss = F.binary_cross_entropy(batch_output, batch_target, weight=batch_weight)
         batch_loss.backward()
         batch_loss_item = batch_loss.item()
         t.set_description("batch loss = %.5f" % batch_loss_item)
@@ -109,7 +113,7 @@ def main(args):
     tv_frac = 0.10
     tv_num = math.ceil(fulllen*tv_frac)
     splits = np.cumsum([fulllen-2*tv_num,tv_num,tv_num])
-    batch_size = 128
+    batch_size = 1024
     n_epochs = 100
     lr = 0.01
     patience = 10

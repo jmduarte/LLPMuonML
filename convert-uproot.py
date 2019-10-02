@@ -23,7 +23,8 @@ infiles = [
 ]
 
 outfile = 'data/raw/WH_HToSSTobbbb_WToLNu_MH-125_MS-15to55_ctauS-100to10000_WJetsToLNu.h5'
-entrystop = 10000
+#entrystop = 10000
+entrystop = None
 other_branches = ['runNum', 'lumiSec', 'evtNum', 'npv', 'rho', 'met', 'metPhi', 'nCsc', 
                   'nCscClusters', 'nCscITClusters', 'nLeptons', 'nJets',
                   'gLLP_eta','gLLP_decay_vertex_r','gLLP_decay_vertex_z']
