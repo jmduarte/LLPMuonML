@@ -6,8 +6,10 @@ import tables
 import numpy as np
 
 class GraphDataset(Dataset):
-    def __init__(self, root, transform=None, pre_transform=None):
+    def __init__(self, root, transform=None, pre_transform=None, connect_all=True):
+        self._connect_all = connect_all
         super(GraphDataset, self).__init__(root, transform, pre_transform)
+
 
     @property
     def raw_file_names(self):
@@ -75,7 +77,11 @@ class GraphDataset(Dataset):
             nevents = label_array.shape[0]
             for event in range(nevents):
                 max_csc = min(spec_array[event,0],feature_array.shape[1])
-                pairs = [[i, j] for (i, j) in itertools.product(range(int(max_csc)),range(int(max_csc))) if i!=j]
+                if self._connect_all:
+                    pairs = [[i, j] for (i, j) in itertools.product(range(int(max_csc)),range(int(max_csc))) if i!=j]
+                else:
+                    station = feature_array[event,:,9]
+                    pairs = [[i, j] for (i, j) in itertools.product(range(int(max_csc)),range(int(max_csc))) if (i!=j and station[i]==station[j])]
                 edge_index = torch.tensor(pairs, dtype=torch.long)
                 edge_index=edge_index.t().contiguous()
                 x = torch.tensor(feature_array[event]/feature_scale, dtype=torch.float)

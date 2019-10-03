@@ -5,7 +5,7 @@ import torch_geometric.transforms as T
 from torch_geometric.nn import EdgeConv, global_mean_pool
 
 class EdgeNet(nn.Module):
-    def __init__(self, input_dim=4, hidden_dim=8, output_dim=1, n_iters=1,aggr='add'):
+    def __init__(self, input_dim=13, hidden_dim=32, output_dim=1, n_iters=1,aggr='add'):
         super(EdgeNet, self).__init__()
         convnn = nn.Sequential(nn.Linear(2*(hidden_dim + input_dim), 2*hidden_dim),
                                nn.ReLU(),
@@ -47,11 +47,10 @@ class EdgeNet(nn.Module):
         output = self.outputnet(x_sum)
         return output
 
-import keras
-from keras.models import Model
-from keras.layers import Input, Dense, BatchNormalization, Dropout, Conv1D, SpatialDropout1D, GRU, Concatenate, Flatten
-
 def dense(nfeatures, ncsc, ncscfeatures, nlabels):
+    import keras
+    from keras.models import Model
+    from keras.layers import Input, Dense, BatchNormalization, Dropout, Conv1D, SpatialDropout1D, GRU, Concatenate, Flatten
 
     inputs = Input(shape=(nfeatures,), name = 'input')  
     inputs_csc = Input(shape=(ncsc,ncscfeatures,), name='input_csc')
@@ -72,6 +71,9 @@ def dense(nfeatures, ncsc, ncscfeatures, nlabels):
 
 
 def dense_conv1d_gru(nfeatures, ncsc, ncscfeatures, nlabels):
+    import keras
+    from keras.models import Model
+    from keras.layers import Input, Dense, BatchNormalization, Dropout, Conv1D, SpatialDropout1D, GRU, Concatenate, Flatten
 
     inputs = Input(shape=(nfeatures,), name = 'input')  
     x = BatchNormalization(name='bn_1')(inputs)
@@ -99,6 +101,9 @@ def dense_conv1d_gru(nfeatures, ncsc, ncscfeatures, nlabels):
     return keras_model
 
 def conv1d_gru(ncsc, ncscfeatures, nlabels):
+    import keras
+    from keras.models import Model
+    from keras.layers import Input, Dense, BatchNormalization, Dropout, Conv1D, SpatialDropout1D, GRU, Concatenate, Flatten
 
     inputs_csc = Input(shape=(ncsc,ncscfeatures,), name='input_csc')
     x = BatchNormalization(name='bn_1')(inputs_csc)
